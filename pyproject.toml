@@ -1,0 +1,13 @@
+[project]
+name = "reelforge"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain>=1.2.6",
+    "langchain-aws>=1.2.1",
+    "moviepy>=2.2.1",
+    "openai>=2.15.0",
+    "python-dotenv>=1.2.1",
+]
