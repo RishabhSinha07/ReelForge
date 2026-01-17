@@ -1,7 +1,7 @@
 [project]
 name = "reelforge"
 version = "0.1.0"
-description = "Add your description here"
+description = "An automated AI pipeline to generate Instagram Reels from ideas using AWS Bedrock and Polly."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
