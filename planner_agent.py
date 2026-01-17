@@ -48,5 +48,6 @@ def generate_reel_ideas(count: int, theme: str) -> List[Dict]:
 
 if __name__ == "__main__":
     # Example usage
-    sample_ideas = generate_reel_ideas(3, "Minimalist Productivity for Software Engineers")
+    # sample_ideas = generate_reel_ideas(1, "Minimalist Productivity for Software Engineers")
+    sample_ideas = generate_reel_ideas(1, "Colourful and fun with potatoes")
     print(json.dumps(sample_ideas, indent=2))

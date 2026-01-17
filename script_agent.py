@@ -56,12 +56,12 @@ def generate_script(idea: Dict, theme: str) -> Dict:
 
 if __name__ == "__main__":
     example_idea = {
-        "title": "The One-Tab Challenge for Devs",
-        "hook": "Can you code with just one browser tab?",
-        "description": "Present a challenge to work on a coding task using only one browser tab. Demonstrate techniques like using browser bookmarks efficiently, leveraging IDE features, and mastering keyboard shortcuts to navigate between resources without opening multiple tabs.",
-        "tone": "Challenging and encouraging"
+        "title": "Rainbow Potato Paradise",
+        "hook": "Potatoes exploding into a vibrant rainbow!",
+        "description": "Start with a plain potato on a white background. Suddenly, it bursts open, revealing layers of colorful mashed potatoes inside - purple, blue, green, yellow, orange, and red. Use food coloring to create these vibrant hues. Show quick cuts of hands scooping each color onto a plate, creating a beautiful rainbow potato artwork. End with a birds-eye view of the finished colorful potato masterpiece, sprinkled with herbs for added visual appeal.",
+        "tone": "Playful and whimsical"
     }
-    example_theme = "Technical Productivity"
+    example_theme = "Colourful and fun"
     
     try:
         script_output = generate_script(example_idea, example_theme)
