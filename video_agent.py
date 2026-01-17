@@ -35,6 +35,7 @@ class VideoAgent:
         if len(audio_files) != len(scenes):
             raise ValueError(f"Validation Mismatch: Found {len(audio_files)} audio files for {len(scenes)} scenes.")
 
+        overlap = 0.3  # Crossfade duration
         clips = []
         for scene in scenes:
             num = scene.get("scene_number")
@@ -51,32 +52,29 @@ class VideoAgent:
                 continue
 
             try:
-                # Video Clip Creation
-                clip = ImageClip(img_path).with_duration(duration)
+                # Audio Integration
+                audio = AudioFileClip(aud_path)
+                audio_duration = audio.duration
 
-                # Resize to fill vertical 1080x1920 (aspect-ratio preserved)
+                if audio_duration <= 0:
+                    audio_duration = duration
+
+                # Video Clip Creation - extend duration by 'overlap' for the transition
+                # This ensures the voice-over finishes BEFORE the next scene starts overlapping
+                clip = ImageClip(img_path).with_duration(audio_duration + overlap)
+
+                # Resize to fill vertical 1080x1920
                 clip = clip.resized(height=self.height)
                 if clip.w < self.width:
                     clip = clip.resized(width=self.width)
 
-                # Center Crop to exact 1080x1920
+                # Center Crop
                 x1 = (clip.w - self.width) / 2
                 y1 = (clip.h - self.height) / 2
-                clip = clip.cropped(
-                    x1=max(0, x1),
-                    y1=max(0, y1),
-                    width=self.width,
-                    height=self.height
-                )
+                clip = clip.cropped(x1=max(0, x1), y1=max(0, y1), width=self.width, height=self.height)
 
-                # Audio Integration
-                audio = AudioFileClip(aud_path)
-                if audio.duration > duration:
-                    audio = audio.with_duration(duration)
+                # Attach Audio (audio is shorter than the clip, so it ends exactly where the overlap starts)
                 clip = clip.with_audio(audio)
-
-                # Fade Transitions
-                clip = clip.with_effects([vfx.FadeIn(0.5), vfx.FadeOut(0.5)])
 
                 clips.append(clip)
             except Exception as e:
@@ -85,8 +83,9 @@ class VideoAgent:
         if not clips:
             raise RuntimeError("No valid clips were generated.")
 
-        # Final Assembly
-        final = concatenate_videoclips(clips, method="compose")
+        # Final Assembly with Crossfade
+        # padding=-overlap overlaps the 'extended' part of the clip with the next scene
+        final = concatenate_videoclips(clips, method="compose", padding=-overlap)
         final.write_videofile(
             output_file,
             fps=self.fps,
