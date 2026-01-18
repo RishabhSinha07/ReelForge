@@ -13,6 +13,26 @@ class VoiceAgent:
         self.voice_id = "Matthew"
         self.base_output_dir = "output"
 
+    def generate_speech_marks(self, text: str, text_type: str = "text") -> str:
+        """
+        Calls Amazon Polly to generate word-level speech marks for the given text.
+        """
+        try:
+            response = self.polly.synthesize_speech(
+                Text=text,
+                OutputFormat="json",
+                VoiceId=self.voice_id,
+                Engine="neural",
+                TextType=text_type,
+                SpeechMarkTypes=["word"]
+            )
+            
+            if "AudioStream" in response:
+                return response["AudioStream"].read().decode("utf-8")
+        except Exception as e:
+            print(f"Error generating speech marks: {e}")
+        return ""
+
     def generate_audio(self, script_json: Dict, reel_name: str, mode: str = "story") -> List[str]:
         generated_files = []
         scenes = script_json.get("scenes", [])
@@ -52,6 +72,14 @@ class VoiceAgent:
                 if "AudioStream" in response:
                     with open(file_path, "wb") as f:
                         f.write(response["AudioStream"].read())
+                    
+                    # Generate and save speech marks
+                    speech_marks = self.generate_speech_marks(text_to_synthesize, text_type)
+                    if speech_marks:
+                        speechmarks_path = f"{file_path}_speechmarks.json"
+                        with open(speechmarks_path, "w") as f:
+                            f.write(speech_marks)
+                    
                     generated_files.append(file_path)
             except Exception as e:
                 print(f"Error generating audio for scene {scene_num}: {e}")

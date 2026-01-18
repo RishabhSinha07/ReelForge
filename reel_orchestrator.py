@@ -77,7 +77,7 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int =
         if not audio_paths:
             logger.error("No audio files were generated.")
             return None
-        logger.info(f"Successfully generated {len(audio_paths)} audio files.")
+        logger.info(f"Successfully generated {len(audio_paths)} audio files and corresponding speech marks for karaoke.")
     except Exception as e:
         logger.error(f"Error during audio generation: {e}")
         return None

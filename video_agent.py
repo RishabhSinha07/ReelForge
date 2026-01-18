@@ -2,8 +2,9 @@ import os
 import json
 import sys
 from typing import Dict
-from moviepy import ImageClip, AudioFileClip, concatenate_videoclips
+from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
 import moviepy.video.fx as vfx
+from text_overlay_agent import TextOverlayAgent
 
 class VideoAgent:
     def __init__(self):
@@ -38,6 +39,11 @@ class VideoAgent:
         # News mode uses even simpler transitions if needed, but 0.3s crossfade is professional
         overlap = 0.1 if mode == "news" else 0.3  
         clips = []
+        
+        # Text Overlay Setup
+        text_overlay_agent = TextOverlayAgent()
+        all_text_clips = []
+        current_time = 0.0
         for scene in scenes:
             num = scene.get("scene_number")
             duration = scene.get("duration_seconds")
@@ -76,15 +82,28 @@ class VideoAgent:
                 # Attach Audio
                 clip = clip.with_audio(audio)
 
+                # Text Overlay Integration
+                speech_marks_path = f"{aud_path}_speechmarks.json"
+                if os.path.exists(speech_marks_path):
+                    speech_marks = text_overlay_agent.load_speech_marks(speech_marks_path)
+                    scene_text_clips = text_overlay_agent.create_karaoke_clips(
+                        narration=scene.get("voice_line", ""),
+                        speech_marks=speech_marks,
+                        scene_start_time=current_time
+                    )
+                    all_text_clips.extend(scene_text_clips)
+
                 clips.append(clip)
+                current_time += audio_duration
             except Exception as e:
                 print(f"Graceful handle: Exception for scene {num}: {e}")
 
         if not clips:
             raise RuntimeError("No valid clips were generated.")
 
-        # Final Assembly with Crossfade
-        final = concatenate_videoclips(clips, method="compose", padding=-overlap)
+        # Final Assembly with Crossfade and Text Overlays
+        video_clip = concatenate_videoclips(clips, method="compose", padding=-overlap)
+        final = CompositeVideoClip([video_clip] + all_text_clips)
         final.write_videofile(
             output_file,
             fps=self.fps,
