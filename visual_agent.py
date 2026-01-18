@@ -17,7 +17,10 @@ class VisualAgent:
         self.model_id = "amazon.nova-canvas-v1:0"
         self.base_output_dir = "output"
 
-    def _optimize_prompt(self, visual_prompt: str, theme: str) -> str:
+    def _optimize_prompt(self, visual_prompt: str, theme: str, mode: str = "story") -> str:
+        if mode == "news":
+            return f"photojournalism, natural lighting, real world, {visual_prompt}. High quality, documentary style, realistic, no text."
+            
         style_mappings = {
             "cartoon": "vibrant 3D animation style, Pixar-like, expressive characters",
             "cinematic": "photorealistic, cinematic lighting, 8k, highly detailed, professional photography",
@@ -29,7 +32,7 @@ class VisualAgent:
         style_suffix = style_mappings.get(theme.lower(), f"in the style of {theme}")
         return f"{visual_prompt}. {style_suffix}. High quality, no text."
 
-    def generate_images(self, script_json: Dict, theme: str, reel_name: str) -> List[str]:
+    def generate_images(self, script_json: Dict, theme: str, reel_name: str, mode: str = "story") -> List[str]:
         generated_files = []
         scenes = script_json.get("scenes", [])
         
@@ -40,7 +43,7 @@ class VisualAgent:
             scene_num = scene.get("scene_number")
             visual_prompt = scene.get("visual_prompt")
             
-            optimized_prompt = self._optimize_prompt(visual_prompt, theme)
+            optimized_prompt = self._optimize_prompt(visual_prompt, theme, mode)
             
             # Updated payload format for amazon.nova-canvas-v1:0
             body_dict = {
@@ -62,7 +65,10 @@ class VisualAgent:
                 try:
                     if attempt > 0:
                         # Slightly modify prompt if it was blocked
-                        body_dict["textToImageParams"]["text"] = f"A beautiful artistic depiction of: {visual_prompt}"
+                        if mode == "news":
+                            body_dict["textToImageParams"]["text"] = f"Photo of: {visual_prompt}, natural lighting"
+                        else:
+                            body_dict["textToImageParams"]["text"] = f"A beautiful artistic depiction of: {visual_prompt}"
 
                     response = self.bedrock.invoke_model(
                         modelId=self.model_id,

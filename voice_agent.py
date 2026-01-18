@@ -13,7 +13,7 @@ class VoiceAgent:
         self.voice_id = "Matthew"
         self.base_output_dir = "output"
 
-    def generate_audio(self, script_json: Dict, reel_name: str) -> List[str]:
+    def generate_audio(self, script_json: Dict, reel_name: str, mode: str = "story") -> List[str]:
         generated_files = []
         scenes = script_json.get("scenes", [])
         
@@ -32,11 +32,20 @@ class VoiceAgent:
                 continue
                 
             try:
+                text_to_synthesize = voice_line
+                text_type = "text"
+                
+                if mode == "news":
+                    # Use SSML for news mode to ensure a slower, professional pace
+                    text_to_synthesize = f"<speak><prosody rate='slow'>{voice_line}</prosody></speak>"
+                    text_type = "ssml"
+
                 response = self.polly.synthesize_speech(
-                    Text=voice_line,
+                    Text=text_to_synthesize,
                     OutputFormat="mp3",
                     VoiceId=self.voice_id,
-                    Engine="neural"
+                    Engine="neural",
+                    TextType=text_type
                 )
                 
                 file_path = os.path.join(audio_dir, f"scene_{scene_num}.mp3")

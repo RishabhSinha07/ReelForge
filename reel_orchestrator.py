@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int = 30):
+def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int = 30, mode: str = "story"):
     """
     Orchestrates the creation of an Instagram Reel from an initial idea.
     """
@@ -26,13 +26,14 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int =
     os.makedirs(output_dir, exist_ok=True)
     
     logger.info(f"Starting orchestration for reel: {reel_name}")
+    logger.info(f"Mode: {mode}")
     logger.info(f"Idea: {reel_idea}")
     logger.info(f"Theme: {theme}")
     logger.info(f"Target Duration: {duration}s")
 
     # 1. Planner Agent
     logger.info("Step 1/5: Generating content plan...")
-    plans = generate_reel_ideas(1, reel_idea)
+    plans = generate_reel_ideas(1, reel_idea, mode=mode)
     if not plans:
         logger.error("Failed to generate content plan.")
         return None
@@ -46,7 +47,7 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int =
     # 2. Script Agent
     logger.info("Step 2/5: Generating detailed script...")
     try:
-        script = generate_script(plan, theme, target_duration=duration)
+        script = generate_script(plan, theme, target_duration=duration, mode=mode)
         script_path = os.path.join(output_dir, "script.json")
         with open(script_path, "w") as f:
             json.dump(script, f, indent=2)
@@ -59,7 +60,7 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int =
     logger.info("Step 3/5: Generating images for each scene...")
     try:
         visual_agent = VisualAgent()
-        image_paths = visual_agent.generate_images(script, theme, reel_name)
+        image_paths = visual_agent.generate_images(script, theme, reel_name, mode=mode)
         if not image_paths:
             logger.error("No images were generated.")
             return None
@@ -72,7 +73,7 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int =
     logger.info("Step 4/5: Generating voice-over audio...")
     try:
         voice_agent = VoiceAgent()
-        audio_paths = voice_agent.generate_audio(script, reel_name)
+        audio_paths = voice_agent.generate_audio(script, reel_name, mode=mode)
         if not audio_paths:
             logger.error("No audio files were generated.")
             return None
@@ -85,7 +86,7 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int =
     logger.info("Step 5/5: Assembling final video...")
     try:
         video_agent = VideoAgent()
-        video_path = video_agent.create_video(reel_name, script)
+        video_path = video_agent.create_video(reel_name, script, mode=mode)
         logger.info(f"Final video created successfully: {video_path}")
         return video_path
     except Exception as e:
@@ -100,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("theme", help="The style/theme (e.g., cinematic, cartoon)")
     parser.add_argument("name", help="The unique name for the reel output")
     parser.add_argument("--duration", type=int, default=30, help="Target duration in seconds (default: 30)")
+    parser.add_argument("--mode", choices=["story", "news"], default="story", help="Content mode: story or news (default: story)")
     
     args = parser.parse_args()
 
@@ -107,7 +109,8 @@ if __name__ == "__main__":
         args.idea, 
         args.theme, 
         args.name, 
-        duration=args.duration
+        duration=args.duration,
+        mode=args.mode
     )
     
     if final_path:

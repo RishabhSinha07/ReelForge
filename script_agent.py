@@ -9,6 +9,39 @@ from pydantic import BaseModel, Field, field_validator
 
 load_dotenv()
 
+def validate_facts(script: Dict):
+    """
+    Checks for fictional elements, storytelling phrases, emojis, and exaggerations in the script.
+    Fails if any are detected.
+    """
+    fictional_words = ["imagine", "what if", "journey", "magic", "wonder", "story", "myth", "legend", "fairytale"]
+    storytelling_phrases = ["once upon a time", "in a world", "long ago", "it all started when", "picture this"]
+    
+    for scene in script.get("scenes", []):
+        text = scene.get("voice_line", "").lower()
+        visual = scene.get("visual_prompt", "").lower()
+        combined = text + " " + visual
+        
+        # Check for emojis
+        if any(char for char in text if ord(char) > 0x1F600 and ord(char) < 0x1F64F):
+            raise ValueError(f"Factual validation failed: Emojis detected in scene {scene['scene_number']}.")
+        
+        # Check for fictional words
+        for word in fictional_words:
+            if word in combined:
+                raise ValueError(f"Factual validation failed: Fictional word '{word}' detected in scene {scene['scene_number']}.")
+                
+        # Check for storytelling phrases
+        for phrase in storytelling_phrases:
+            if phrase in combined:
+                raise ValueError(f"Factual validation failed: Storytelling phrase '{phrase}' detected in scene {scene['scene_number']}.")
+        
+        # Check for exaggerations (very subjective, but we can catch some common ones)
+        exaggerations = ["mind-blowing", "unbelievable", "insane", "shocking", "life-changing"]
+        for word in exaggerations:
+            if word in combined:
+                raise ValueError(f"Factual validation failed: Exaggeration '{word}' detected in scene {scene['scene_number']}.")
+
 class Scene(BaseModel):
     scene_number: int = Field(description="The sequential number of the scene")
     voice_line: str = Field(description="Natural flowing narration")
@@ -17,41 +50,51 @@ class Scene(BaseModel):
     duration_seconds: float = Field(description="Duration of the scene in seconds")
 
 class Script(BaseModel):
+    mode: str = Field(default="story", description="The mode: story or news")
     scenes: List[Scene] = Field(description="List of 5-7 scenes")
 
-    @field_validator('scenes')
+    @field_validator('scenes', mode='after')
     @classmethod
-    def validate_script_constraints(cls, v: List[Scene]) -> List[Scene]:
+    def validate_script_constraints(cls, v: List[Scene], info) -> List[Scene]:
+        mode = info.data.get("mode", "story")
         if not (5 <= len(v) <= 7):
             raise ValueError(f"Script must have between 5 and 7 scenes. Found {len(v)}.")
         
-        # Continuity validation: Check for transition keywords and flow
-        transitions = ["then", "as", "suddenly", "moments later", "realizes", "while", "instead", "now", "finally", "because", "so", "but", "however", "therefore"]
-        flow_score = 0
-        emotions = set()
         total_duration = sum(s.duration_seconds for s in v)
-        
-        for i in range(len(v)):
-            combined_text = (v[i].voice_line + " " + v[i].visual_prompt).lower()
-            if i > 0 and any(t in combined_text for t in transitions):
-                flow_score += 1
-            
-            emotions.add(v[i].emotion.lower())
-            
-            if len(v[i].voice_line.split()) < 3: # allow shorter lines if punchy
-                if i > 0: # only allow super short lines if not the first (hook)
-                    pass 
-                else:
-                    raise ValueError(f"Scene {v[i].scene_number} voice line is too short.")
-
-        if flow_score < 2:
-            raise ValueError("Scenes feel independent. Use 'but', 'so', 'because', or 'then' to connect moments.")
-            
-        if len(emotions) < 2:
-            raise ValueError("Script lacks emotional variety. It needs an arc (e.g. fear to relief).")
-        
-        if not (10 <= total_duration <= 60): # Basic sanity check for duration
+        if not (10 <= total_duration <= 60):
              raise ValueError(f"Total duration ({total_duration}s) must be between 10 and 60 seconds.")
+
+        if mode == "story":
+            # Continuity validation: Check for transition keywords and flow
+            transitions = ["then", "as", "suddenly", "moments later", "realizes", "while", "instead", "now", "finally", "because", "so", "but", "however", "therefore"]
+            flow_score = 0
+            emotions = set()
+            
+            for i in range(len(v)):
+                combined_text = (v[i].voice_line + " " + v[i].visual_prompt).lower()
+                if i > 0 and any(t in combined_text for t in transitions):
+                    flow_score += 1
+                
+                emotions.add(v[i].emotion.lower())
+                
+                if len(v[i].voice_line.split()) < 3: # allow shorter lines if punchy
+                    if i > 0: # only allow super short lines if not the first (hook)
+                        pass 
+                    else:
+                        raise ValueError(f"Scene {v[i].scene_number} voice line is too short.")
+
+            if flow_score < 2:
+                raise ValueError("Scenes feel independent. Use 'but', 'so', 'because', or 'then' to connect moments.")
+                
+            if len(emotions) < 2:
+                raise ValueError("Script lacks emotional variety. It needs an arc (e.g. fear to relief).")
+        
+        elif mode == "news":
+            for scene in v:
+                if any(char for char in scene.voice_line if ord(char) > 0x2000): # basic emoji/non-ascii check
+                     raise ValueError(f"News script must not contain emojis or special characters.")
+                if scene.emotion.lower() != "neutral":
+                     raise ValueError(f"News script must have 'neutral' emotion for all scenes.")
             
         return v
 
@@ -82,15 +125,37 @@ SCENE_SYSTEM_PROMPT = (
     "Output JSON format:\n{format_instructions}"
 )
 
-def generate_script(idea: Dict, theme: str, target_duration: int = 30) -> Dict:
+NEWS_STORY_SYSTEM_PROMPT = (
+    "You are a professional news writer. Write a factual summary of the following event or discovery (80-120 words). "
+    "Rules: Neutral tone, NO emotions, NO metaphors, NO exaggeration, NO opinions, NO clickbait. "
+    "Focus purely on verified facts and clear reporting. "
+    "Target Duration: The report should be paced for a {target_duration} second video. "
+    "Subject: {theme}"
+)
+
+NEWS_SCENE_SYSTEM_PROMPT = (
+    "You are a news broadcast director. Transform the provided facts into a 5-7 scene news script. "
+    "Rules:\n"
+    "1. Each scene must present ONE verified fact.\n"
+    "2. NO slang, NO storytelling transitions, NO emotional language.\n"
+    "3. Short, authoritative sentences (News anchor style).\n"
+    "4. Voice lines should be neutral and factual (e.g., 'The probe reached the surface at 4 PM').\n"
+    "5. Visual prompts must be realistic, documentary-style descriptions.\n"
+    "6. Emotion must ALWAYS be 'neutral'.\n"
+    "7. Total duration must be exactly {target_duration} seconds.\n\n"
+    "Output JSON format:\n{format_instructions}"
+)
+
+def generate_script(idea: Dict, theme: str, target_duration: int = 30, mode: str = "story") -> Dict:
     llm = ChatBedrock(
         model_id="us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-        model_kwargs={"temperature": 0.7}
+        model_kwargs={"temperature": 0.3 if mode == "news" else 0.7}
     )
 
-    # Step 1: Story Generation
+    # Step 1: Summary/Story Generation
+    s_prompt = NEWS_STORY_SYSTEM_PROMPT if mode == "news" else STORY_SYSTEM_PROMPT
     story_prompt = ChatPromptTemplate.from_messages([
-        ("system", STORY_SYSTEM_PROMPT),
+        ("system", s_prompt),
         ("human", "Idea: {idea}")
     ])
     
@@ -98,9 +163,10 @@ def generate_script(idea: Dict, theme: str, target_duration: int = 30) -> Dict:
     
     # Step 2: Split Story into Scenes
     parser = JsonOutputParser(pydantic_object=Script)
+    sc_prompt = NEWS_SCENE_SYSTEM_PROMPT if mode == "news" else SCENE_SYSTEM_PROMPT
     script_prompt = ChatPromptTemplate.from_messages([
-        ("system", SCENE_SYSTEM_PROMPT),
-        ("human", "Story: {story}")
+        ("system", sc_prompt),
+        ("human", "Content: {story}")
     ]).partial(format_instructions=parser.get_format_instructions())
     
     script_chain = script_prompt | llm | parser
@@ -110,27 +176,34 @@ def generate_script(idea: Dict, theme: str, target_duration: int = 30) -> Dict:
         try:
             story = story_chain.invoke({"idea": idea, "theme": theme, "target_duration": target_duration})
             script_data = script_chain.invoke({"story": story, "target_duration": target_duration})
+            script_data["mode"] = mode
             
             # Validate using Pydantic
             validated_script = Script(**script_data)
-            return validated_script.model_dump()
+            script_dict = validated_script.model_dump()
+            
+            # Additional fact validation for news mode
+            if mode == "news":
+                validate_facts(script_dict)
+                
+            return script_dict
             
         except Exception as e:
             if attempt == max_retries - 1:
-                raise Exception(f"Failed to generate a continuous script: {str(e)}")
+                raise Exception(f"Failed to generate a valid script ({mode}): {str(e)}")
             continue
 
 if __name__ == "__main__":
     example_idea = {
-        "title": "The Golden Compass",
-        "hook": "A compass that points to what you fear most.",
-        "description": "An explorer in a dark cave discovers a compass that starts spinning wildly as a shadow approaches.",
-        "tone": "Tense and atmospheric"
+        "title": "NASA Mars Water",
+        "hook": "NASA confirms water on Mars.",
+        "description": "Evidence from the Mars Reconnaissance Orbiter suggests liquid water flows on the planet today.",
+        "facts": ["Liquid water on Mars", "Found in craters", "Confirmed by satellites"]
     }
-    example_theme = "Mystery/Thriller"
+    example_theme = "Space Exploration"
     
     try:
-        output = generate_script(example_idea, example_theme, target_duration=15)
+        output = generate_script(example_idea, example_theme, target_duration=15, mode="news")
         print(json.dumps(output, indent=2))
     except Exception as err:
         print(f"Error: {err}")

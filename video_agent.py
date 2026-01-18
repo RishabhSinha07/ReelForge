@@ -12,7 +12,7 @@ class VideoAgent:
         self.width = 1080
         self.height = 1920
 
-    def create_video(self, reel_name: str, script_json: Dict):
+    def create_video(self, reel_name: str, script_json: Dict, mode: str = "story"):
         scenes = script_json.get("scenes", [])
         reel_path = os.path.join(self.base_dir, reel_name)
         image_dir = os.path.join(reel_path, "images")
@@ -35,7 +35,8 @@ class VideoAgent:
         if len(audio_files) != len(scenes):
             raise ValueError(f"Validation Mismatch: Found {len(audio_files)} audio files for {len(scenes)} scenes.")
 
-        overlap = 0.3  # Crossfade duration
+        # News mode uses even simpler transitions if needed, but 0.3s crossfade is professional
+        overlap = 0.1 if mode == "news" else 0.3  
         clips = []
         for scene in scenes:
             num = scene.get("scene_number")
@@ -60,7 +61,6 @@ class VideoAgent:
                     audio_duration = duration
 
                 # Video Clip Creation - extend duration by 'overlap' for the transition
-                # This ensures the voice-over finishes BEFORE the next scene starts overlapping
                 clip = ImageClip(img_path).with_duration(audio_duration + overlap)
 
                 # Resize to fill vertical 1080x1920
@@ -73,7 +73,7 @@ class VideoAgent:
                 y1 = (clip.h - self.height) / 2
                 clip = clip.cropped(x1=max(0, x1), y1=max(0, y1), width=self.width, height=self.height)
 
-                # Attach Audio (audio is shorter than the clip, so it ends exactly where the overlap starts)
+                # Attach Audio
                 clip = clip.with_audio(audio)
 
                 clips.append(clip)
@@ -84,7 +84,6 @@ class VideoAgent:
             raise RuntimeError("No valid clips were generated.")
 
         # Final Assembly with Crossfade
-        # padding=-overlap overlaps the 'extended' part of the clip with the next scene
         final = concatenate_videoclips(clips, method="compose", padding=-overlap)
         final.write_videofile(
             output_file,
@@ -100,19 +99,20 @@ class VideoAgent:
         return output_file
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python video_agent.py <reel_name> <path_to_script_json>")
-        sys.exit(1)
-
-    reel = sys.argv[1]
-    script_path = sys.argv[2]
+    import argparse
+    parser = argparse.ArgumentParser(description="Assemble Video from scenes")
+    parser.add_argument("name", help="Reel name")
+    parser.add_argument("script", help="Path to script.json")
+    parser.add_argument("--mode", default="story", help="story or news")
+    
+    args = parser.parse_args()
 
     try:
-        with open(script_path, 'r') as f:
+        with open(args.script, 'r') as f:
             script_data = json.load(f)
 
         agent = VideoAgent()
-        output = agent.create_video(reel, script_data)
+        output = agent.create_video(args.name, script_data, mode=args.mode)
         print(f"Video created successfully: {output}")
     except Exception as error:
         print(f"Error: {error}")

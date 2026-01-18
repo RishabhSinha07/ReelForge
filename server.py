@@ -41,6 +41,7 @@ class ReelRequest(BaseModel):
     theme: str
     name: str
     duration: int = 30
+    mode: str = "story"
 
 @app.post("/generate")
 async def generate_reel(request: ReelRequest, background_tasks: BackgroundTasks):
@@ -52,6 +53,7 @@ async def generate_reel(request: ReelRequest, background_tasks: BackgroundTasks)
         "idea": request.idea,
         "theme": request.theme,
         "duration": request.duration,
+        "mode": request.mode,
         "status": "processing",
         "video_path": None
     }
@@ -62,17 +64,19 @@ async def generate_reel(request: ReelRequest, background_tasks: BackgroundTasks)
         request.idea, 
         request.theme, 
         request.name, 
-        request.duration
+        request.duration,
+        request.mode
     )
     return {"message": "Generation started", "reel_name": request.name}
 
-def run_orchestration(idea, theme, name, duration):
+def run_orchestration(idea: str, theme: str, name: str, duration: int, mode: str):
     try:
         video_path = orchestrate_reel(
             idea, 
             theme, 
             name, 
-            duration=duration
+            duration=duration,
+            mode=mode
         )
         db = load_db()
         if video_path:
