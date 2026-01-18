@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def orchestrate_reel(reel_idea: str, theme: str, reel_name: str):
+def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int = 30):
     """
     Orchestrates the creation of an Instagram Reel from an initial idea.
     """
@@ -28,6 +28,7 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str):
     logger.info(f"Starting orchestration for reel: {reel_name}")
     logger.info(f"Idea: {reel_idea}")
     logger.info(f"Theme: {theme}")
+    logger.info(f"Target Duration: {duration}s")
 
     # 1. Planner Agent
     logger.info("Step 1/5: Generating content plan...")
@@ -45,7 +46,7 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str):
     # 2. Script Agent
     logger.info("Step 2/5: Generating detailed script...")
     try:
-        script = generate_script(plan, theme)
+        script = generate_script(plan, theme, target_duration=duration)
         script_path = os.path.join(output_dir, "script.json")
         with open(script_path, "w") as f:
             json.dump(script, f, indent=2)
@@ -92,15 +93,22 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str):
         return None
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("Usage: python reel_orchestrator.py <reel_idea> <theme> <reel_name>")
-        sys.exit(1)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Orchestrate Reel Creation")
+    parser.add_argument("idea", help="The initial idea or topic for the reel")
+    parser.add_argument("theme", help="The style/theme (e.g., cinematic, cartoon)")
+    parser.add_argument("name", help="The unique name for the reel output")
+    parser.add_argument("--duration", type=int, default=30, help="Target duration in seconds (default: 30)")
+    
+    args = parser.parse_args()
 
-    idea_input = sys.argv[1]
-    theme_input = sys.argv[2]
-    name_input = sys.argv[3]
-
-    final_path = orchestrate_reel(idea_input, theme_input, name_input)
+    final_path = orchestrate_reel(
+        args.idea, 
+        args.theme, 
+        args.name, 
+        duration=args.duration
+    )
     
     if final_path:
         print(f"\nSUCCESS! Final Reel: {final_path}")

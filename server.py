@@ -40,6 +40,7 @@ class ReelRequest(BaseModel):
     idea: str
     theme: str
     name: str
+    duration: int = 30
 
 @app.post("/generate")
 async def generate_reel(request: ReelRequest, background_tasks: BackgroundTasks):
@@ -50,17 +51,29 @@ async def generate_reel(request: ReelRequest, background_tasks: BackgroundTasks)
     db[request.name] = {
         "idea": request.idea,
         "theme": request.theme,
+        "duration": request.duration,
         "status": "processing",
         "video_path": None
     }
     save_db(db)
     
-    background_tasks.add_task(run_orchestration, request.idea, request.theme, request.name)
+    background_tasks.add_task(
+        run_orchestration, 
+        request.idea, 
+        request.theme, 
+        request.name, 
+        request.duration
+    )
     return {"message": "Generation started", "reel_name": request.name}
 
-def run_orchestration(idea, theme, name):
+def run_orchestration(idea, theme, name, duration):
     try:
-        video_path = orchestrate_reel(idea, theme, name)
+        video_path = orchestrate_reel(
+            idea, 
+            theme, 
+            name, 
+            duration=duration
+        )
         db = load_db()
         if video_path:
             # We want the path relative to the static route
@@ -105,6 +118,10 @@ async def get_status(name: str):
         raise HTTPException(status_code=404, detail="Reel not found")
     return db[name]
 
+@app.get("/config")
+async def get_config():
+    return {"status": "ok"}
+
 # Serve the output directory as static files
 if not os.path.exists("output"):
     os.makedirs("output")
@@ -112,4 +129,4 @@ app.mount("/videos", StaticFiles(directory="output"), name="videos")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)

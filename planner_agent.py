@@ -19,6 +19,15 @@ class ReelIdea(BaseModel):
 class ReelIdeasResponse(BaseModel):
     ideas: List[ReelIdea]
 
+DEFAULT_SYSTEM_PROMPT = (
+    "You are an expert social media strategist and storyteller. "
+    "Your task is to generate viral-ready reel ideas that focus on HUMAN EMOTION and RELATABLE STORIES. "
+    "Avoid technical jargon or dry factual content. "
+    "Each idea must have a strong emotional hook (fear, joy, curiosity, surprise) and a clear 'Before' and 'After' narrative potential. "
+    "Use simple, conversational language in the descriptions. "
+    "You must return the response in valid JSON format matching the schema provided."
+)
+
 def generate_reel_ideas(count: int, theme: str) -> List[Dict]:
     # Use the Inference Profile ID (us. prefix) to support cross-region inference
     # This addresses the 'on-demand throughput isn't supported' error.
@@ -30,10 +39,7 @@ def generate_reel_ideas(count: int, theme: str) -> List[Dict]:
     parser = JsonOutputParser(pydantic_object=ReelIdeasResponse)
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert social media strategist and content creator. "
-                  "Your task is to generate viral-ready reel ideas that are highly engaging. "
-                  "Adapt your tone and content style specifically to the provided theme to ensure resonance with the target audience. "
-                  "You must return the response in valid JSON format matching the schema provided."),
+        ("system", DEFAULT_SYSTEM_PROMPT),
         ("human", "Generate {count} unique reel ideas based on the theme: '{theme}'.\n\n{format_instructions}")
     ]).partial(format_instructions=parser.get_format_instructions())
 

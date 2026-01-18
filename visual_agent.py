@@ -43,7 +43,7 @@ class VisualAgent:
             optimized_prompt = self._optimize_prompt(visual_prompt, theme)
             
             # Updated payload format for amazon.nova-canvas-v1:0
-            body = json.dumps({
+            body_dict = {
                 "taskType": "TEXT_IMAGE",
                 "textToImageParams": {
                     "text": optimized_prompt
@@ -55,26 +55,40 @@ class VisualAgent:
                     "quality": "standard",
                     "cfgScale": 8.0
                 }
-            })
+            }
+
+            success = False
+            for attempt in range(2): # Simple retry with slightly modified prompt if filtered
+                try:
+                    if attempt > 0:
+                        # Slightly modify prompt if it was blocked
+                        body_dict["textToImageParams"]["text"] = f"A beautiful artistic depiction of: {visual_prompt}"
+
+                    response = self.bedrock.invoke_model(
+                        modelId=self.model_id,
+                        body=json.dumps(body_dict)
+                    )
+                    
+                    response_body = json.loads(response.get("body").read())
+                    base64_image = response_body.get("images")[0]
+                    image_data = base64.b64decode(base64_image)
+                    
+                    file_path = os.path.join(reel_dir, f"scene_{scene_num}.png")
+                    with open(file_path, "wb") as f:
+                        f.write(image_data)
+                    
+                    generated_files.append(file_path)
+                    success = True
+                    break
+                except Exception as e:
+                    if "blocked by our content filters" in str(e) and attempt == 0:
+                        print(f"Content filter block for scene {scene_num}, retrying with modified prompt...")
+                        continue
+                    print(f"Error generating image for scene {scene_num}: {e}")
+                    raise Exception(f"Failed to generate image for scene {scene_num}: {e}")
             
-            try:
-                response = self.bedrock.invoke_model(
-                    modelId=self.model_id,
-                    body=body
-                )
-                
-                response_body = json.loads(response.get("body").read())
-                # Nova Canvas returns 'images' as a list of base64 strings
-                base64_image = response_body.get("images")[0]
-                image_data = base64.b64decode(base64_image)
-                
-                file_path = os.path.join(reel_dir, f"scene_{scene_num}.png")
-                with open(file_path, "wb") as f:
-                    f.write(image_data)
-                
-                generated_files.append(file_path)
-            except Exception as e:
-                print(f"Error generating image for scene {scene_num}: {e}")
+            if not success:
+                raise Exception(f"Failed to generate image for scene {scene_num} after multiple attempts.")
                 
         return generated_files
 
