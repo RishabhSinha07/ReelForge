@@ -7,10 +7,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class VoiceAgent:
-    def __init__(self):
+    def __init__(self, voice_id: str = "Justin", engine: str = "neural"):
         self.region = os.getenv("AWS_REGION", "us-east-1")
         self.polly = boto3.client("polly", region_name=self.region)
-        self.voice_id = "Matthew"
+        self.voice_id = voice_id
+        self.engine = engine
         self.base_output_dir = "output"
 
     def generate_speech_marks(self, text: str, text_type: str = "text") -> str:
@@ -22,7 +23,7 @@ class VoiceAgent:
                 Text=text,
                 OutputFormat="json",
                 VoiceId=self.voice_id,
-                Engine="neural",
+                Engine=self.engine,
                 TextType=text_type,
                 SpeechMarkTypes=["word"]
             )
@@ -64,7 +65,7 @@ class VoiceAgent:
                     Text=text_to_synthesize,
                     OutputFormat="mp3",
                     VoiceId=self.voice_id,
-                    Engine="neural",
+                    Engine=self.engine,
                     TextType=text_type
                 )
                 

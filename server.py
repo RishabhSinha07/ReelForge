@@ -42,6 +42,8 @@ class ReelRequest(BaseModel):
     name: str
     duration: int = 30
     mode: str = "story"
+    voice: str = "Justin"
+    engine: str = "neural"
 
 @app.post("/generate")
 async def generate_reel(request: ReelRequest, background_tasks: BackgroundTasks):
@@ -54,6 +56,8 @@ async def generate_reel(request: ReelRequest, background_tasks: BackgroundTasks)
         "theme": request.theme,
         "duration": request.duration,
         "mode": request.mode,
+        "voice": request.voice,
+        "engine": request.engine,
         "status": "processing",
         "video_path": None
     }
@@ -65,18 +69,22 @@ async def generate_reel(request: ReelRequest, background_tasks: BackgroundTasks)
         request.theme, 
         request.name, 
         request.duration,
-        request.mode
+        request.mode,
+        request.voice,
+        request.engine
     )
     return {"message": "Generation started", "reel_name": request.name}
 
-def run_orchestration(idea: str, theme: str, name: str, duration: int, mode: str):
+def run_orchestration(idea: str, theme: str, name: str, duration: int, mode: str, voice: str, engine: str):
     try:
         video_path = orchestrate_reel(
             idea, 
             theme, 
             name, 
             duration=duration,
-            mode=mode
+            mode=mode,
+            voice=voice,
+            engine=engine
         )
         db = load_db()
         if video_path:

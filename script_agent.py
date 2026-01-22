@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 from dotenv import load_dotenv
 from langchain_aws import ChatBedrock
 from langchain_core.prompts import ChatPromptTemplate
@@ -42,15 +42,33 @@ def validate_facts(script: Dict):
             if word in combined:
                 raise ValueError(f"Factual validation failed: Exaggeration '{word}' detected in scene {scene['scene_number']}.")
 
+class Character(BaseModel):
+    name: str = Field(description="Character identifier (e.g., 'the robot', 'the girl')")
+    appearance: str = Field(description="Physical description: age, build, skin/material, face features")
+    clothing: str = Field(description="What they wear, colors, style")
+    distinctive_features: str = Field(description="Unique identifying marks: scars, accessories, glowing eyes, etc.")
+
+class Setting(BaseModel):
+    location: str = Field(description="Where the story takes place")
+    time_of_day: str = Field(description="Morning, noon, dusk, night, etc.")
+    atmosphere: str = Field(description="Weather, mood, lighting quality")
+    key_elements: List[str] = Field(description="Important objects/landmarks that appear throughout")
+
+class VisualBible(BaseModel):
+    characters: List[Character] = Field(description="All characters in the story")
+    setting: Setting = Field(description="The primary setting")
+    color_palette: str = Field(description="Dominant colors: e.g., 'warm oranges and browns with blue accents'")
+
 class Scene(BaseModel):
     scene_number: int = Field(description="The sequential number of the scene")
     voice_line: str = Field(description="Natural flowing narration")
-    visual_prompt: str = Field(description="Describe exactly what we see")
+    visual_prompt: str = Field(description="Describe exactly what we see. MUST reference characters by their Visual Bible description and include setting details.")
     emotion: str = Field(description="The emotion of the moment")
     duration_seconds: float = Field(description="Duration of the scene in seconds")
 
 class Script(BaseModel):
     mode: str = Field(default="story", description="The mode: story or news")
+    visual_bible: Optional[VisualBible] = Field(default=None, description="Visual consistency reference (story mode only)")
     scenes: List[Scene] = Field(description="List of 5-7 scenes")
 
     @field_validator('scenes', mode='after')
@@ -146,64 +164,145 @@ NEWS_SCENE_SYSTEM_PROMPT = (
     "Output JSON format:\n{format_instructions}"
 )
 
+SINGLE_PASS_STORY_PROMPT = """You are a world-class director creating a cinematic short.
+
+TASK: Create a complete visual story with consistent characters and setting.
+
+STEP 1 - VISUAL BIBLE (Critical for consistency):
+Define your characters and setting FIRST. These descriptions will be used for EVERY image.
+- Characters: Describe each character's exact appearance, clothing, distinctive features
+- Setting: Define the location, time of day, atmosphere, key visual elements
+- Color Palette: Choose 2-3 dominant colors that unify the visual style
+
+STEP 2 - SCENES (5-7 scenes, total {target_duration} seconds):
+Each scene's visual_prompt MUST:
+- Reference characters using their Visual Bible descriptions (repeat key visual details)
+- Include the setting's key elements
+- Describe camera angle (close-up, wide shot, over-shoulder, etc.)
+- Note what CHANGED from the previous scene (lighting shift, character moved, expression changed)
+
+Rules:
+- Maximum 10 words per voice line
+- Emotional arc required (e.g., curiosity -> fear -> relief)
+- Each scene happens BECAUSE of the previous one
+- Use simple, punchy words (Grade 5 level)
+- Use personal pronouns (I, You, We) for intimacy
+
+Theme/Style: {theme}
+
+{format_instructions}"""
+
 def generate_script(idea: Dict, theme: str, target_duration: int = 30, mode: str = "story") -> Dict:
     llm = ChatBedrock(
         model_id="us.anthropic.claude-3-5-sonnet-20240620-v1:0",
         model_kwargs={"temperature": 0.3 if mode == "news" else 0.7}
     )
 
-    # Step 1: Summary/Story Generation
-    s_prompt = NEWS_STORY_SYSTEM_PROMPT if mode == "news" else STORY_SYSTEM_PROMPT
-    story_prompt = ChatPromptTemplate.from_messages([
-        ("system", s_prompt),
-        ("human", "Idea: {idea}")
-    ])
-    
-    story_chain = story_prompt | llm | StrOutputParser()
-    
-    # Step 2: Split Story into Scenes
     parser = JsonOutputParser(pydantic_object=Script)
-    sc_prompt = NEWS_SCENE_SYSTEM_PROMPT if mode == "news" else SCENE_SYSTEM_PROMPT
-    script_prompt = ChatPromptTemplate.from_messages([
-        ("system", sc_prompt),
-        ("human", "Content: {story}")
-    ]).partial(format_instructions=parser.get_format_instructions())
-    
-    script_chain = script_prompt | llm | parser
 
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            story = story_chain.invoke({"idea": idea, "theme": theme, "target_duration": target_duration})
-            script_data = script_chain.invoke({"story": story, "target_duration": target_duration})
-            script_data["mode"] = mode
-            
-            # Validate using Pydantic
-            validated_script = Script(**script_data)
-            script_dict = validated_script.model_dump()
-            
-            # Additional fact validation for news mode
-            if mode == "news":
+    if mode == "story":
+        # Single-pass generation for story mode: Visual Bible + scenes in one call
+        story_prompt = ChatPromptTemplate.from_messages([
+            ("system", SINGLE_PASS_STORY_PROMPT),
+            ("human", "Create a cinematic story based on this idea: {idea}")
+        ]).partial(format_instructions=parser.get_format_instructions())
+
+        story_chain = story_prompt | llm | parser
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                script_data = story_chain.invoke({
+                    "idea": idea,
+                    "theme": theme,
+                    "target_duration": target_duration
+                })
+                script_data["mode"] = mode
+
+                # Validate using Pydantic
+                validated_script = Script(**script_data)
+                script_dict = validated_script.model_dump()
+
+                return script_dict
+
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise Exception(f"Failed to generate a valid script ({mode}): {str(e)}")
+                continue
+    else:
+        # Two-step generation for news mode (no Visual Bible needed)
+        # Step 1: Summary Generation
+        news_story_prompt = ChatPromptTemplate.from_messages([
+            ("system", NEWS_STORY_SYSTEM_PROMPT),
+            ("human", "Idea: {idea}")
+        ])
+
+        news_story_chain = news_story_prompt | llm | StrOutputParser()
+
+        # Step 2: Split into Scenes
+        news_script_prompt = ChatPromptTemplate.from_messages([
+            ("system", NEWS_SCENE_SYSTEM_PROMPT),
+            ("human", "Content: {story}")
+        ]).partial(format_instructions=parser.get_format_instructions())
+
+        news_script_chain = news_script_prompt | llm | parser
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                story = news_story_chain.invoke({"idea": idea, "theme": theme, "target_duration": target_duration})
+                script_data = news_script_chain.invoke({"story": story, "target_duration": target_duration})
+                script_data["mode"] = mode
+
+                # Validate using Pydantic
+                validated_script = Script(**script_data)
+                script_dict = validated_script.model_dump()
+
+                # Additional fact validation for news mode
                 validate_facts(script_dict)
-                
-            return script_dict
-            
-        except Exception as e:
-            if attempt == max_retries - 1:
-                raise Exception(f"Failed to generate a valid script ({mode}): {str(e)}")
-            continue
+
+                return script_dict
+
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise Exception(f"Failed to generate a valid script ({mode}): {str(e)}")
+                continue
 
 if __name__ == "__main__":
-    example_idea = {
+    # Test story mode with Visual Bible
+    story_idea = "A lonely robot finds a flower in a wasteland"
+    story_theme = "cinematic"
+
+    print("=== Testing STORY mode (with Visual Bible) ===")
+    try:
+        story_output = generate_script(story_idea, story_theme, target_duration=20, mode="story")
+        print(json.dumps(story_output, indent=2))
+
+        # Verify Visual Bible is present
+        if story_output.get("visual_bible"):
+            print("\n✓ Visual Bible generated successfully!")
+            print(f"  Characters: {len(story_output['visual_bible'].get('characters', []))}")
+            print(f"  Setting: {story_output['visual_bible'].get('setting', {}).get('location', 'N/A')}")
+            print(f"  Color Palette: {story_output['visual_bible'].get('color_palette', 'N/A')}")
+        else:
+            print("\n✗ Warning: Visual Bible not generated")
+    except Exception as err:
+        print(f"Story mode error: {err}")
+
+    print("\n" + "="*50 + "\n")
+
+    # Test news mode (no Visual Bible)
+    news_idea = {
         "title": "NASA Mars Water",
         "hook": "NASA confirms water on Mars.",
         "description": "Evidence from the Mars Reconnaissance Orbiter suggests liquid water flows on the planet today.",
         "facts": ["Liquid water on Mars", "Found in craters", "Confirmed by satellites"]
     }
-    example_theme = "Space Exploration"
-    
+    news_theme = "Space Exploration"
+
+    print("=== Testing NEWS mode (no Visual Bible) ===")
     try:
-        output = generate_script(example_idea, example_theme, target_duration=15, mode="news")
-        print(json.dumps(output, indent=2))
+        news_output = generate_script(news_idea, news_theme, target_duration=15, mode="news")
+        print(json.dumps(news_output, indent=2))
     except Exception as err:
-        print(f"Error: {err}")
+        print(f"News mode error: {err}")

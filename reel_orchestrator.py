@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int = 30, mode: str = "story"):
+def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int = 30, mode: str = "story", voice: str = "Justin", engine: str = "neural"):
     """
     Orchestrates the creation of an Instagram Reel from an initial idea.
     """
@@ -72,7 +72,7 @@ def orchestrate_reel(reel_idea: str, theme: str, reel_name: str, duration: int =
     # 4. Voice Agent
     logger.info("Step 4/5: Generating voice-over audio...")
     try:
-        voice_agent = VoiceAgent()
+        voice_agent = VoiceAgent(voice_id=voice, engine=engine)
         audio_paths = voice_agent.generate_audio(script, reel_name, mode=mode)
         if not audio_paths:
             logger.error("No audio files were generated.")
@@ -102,6 +102,8 @@ if __name__ == "__main__":
     parser.add_argument("name", help="The unique name for the reel output")
     parser.add_argument("--duration", type=int, default=30, help="Target duration in seconds (default: 30)")
     parser.add_argument("--mode", choices=["story", "news"], default="story", help="Content mode: story or news (default: story)")
+    parser.add_argument("--voice", default="Justin", help="Polly Voice ID (e.g. Justin, Joanna, Stephen)")
+    parser.add_argument("--engine", choices=["neural", "generative", "standard"], default="neural", help="Polly Engine type (default: neural)")
     
     args = parser.parse_args()
 
@@ -110,7 +112,9 @@ if __name__ == "__main__":
         args.theme, 
         args.name, 
         duration=args.duration,
-        mode=args.mode
+        mode=args.mode,
+        voice=args.voice,
+        engine=args.engine
     )
     
     if final_path:

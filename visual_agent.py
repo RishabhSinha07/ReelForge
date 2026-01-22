@@ -2,7 +2,7 @@ import os
 import json
 import base64
 import boto3
-from typing import List, Dict
+from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,10 +17,10 @@ class VisualAgent:
         self.model_id = "amazon.nova-canvas-v1:0"
         self.base_output_dir = "output"
 
-    def _optimize_prompt(self, visual_prompt: str, theme: str, mode: str = "story") -> str:
+    def _optimize_prompt(self, visual_prompt: str, theme: str, visual_bible: Optional[Dict] = None, mode: str = "story") -> str:
         if mode == "news":
             return f"photojournalism, natural lighting, real world, {visual_prompt}. High quality, documentary style, realistic, no text."
-            
+
         style_mappings = {
             "cartoon": "vibrant 3D animation style, Pixar-like, expressive characters",
             "cinematic": "photorealistic, cinematic lighting, 8k, highly detailed, professional photography",
@@ -28,22 +28,49 @@ class VisualAgent:
             "cyberpunk": "neon, futuristic, high-tech, dark moody lighting",
             "sketch": "artistic charcoal sketch, hand-drawn, textured paper"
         }
-        
+
         style_suffix = style_mappings.get(theme.lower(), f"in the style of {theme}")
-        return f"{visual_prompt}. {style_suffix}. High quality, no text."
+
+        # Build compact Visual Bible hints (only for characters mentioned in this scene)
+        consistency_hints = ""
+        if visual_bible:
+            # Find which characters are mentioned in this scene's visual_prompt
+            prompt_lower = visual_prompt.lower()
+            characters = visual_bible.get("characters", [])
+
+            mentioned_chars = []
+            for c in characters:
+                char_name = c.get("name", "").lower()
+                # Check if character name appears in the visual prompt
+                if char_name and char_name in prompt_lower:
+                    # Build a compact description: just distinctive features
+                    features = c.get("distinctive_features", "")
+                    if features:
+                        mentioned_chars.append(f"{c.get('name')}: {features}")
+
+            if mentioned_chars:
+                consistency_hints = " Character details: " + ", ".join(mentioned_chars) + "."
+
+            # Add color palette as a subtle hint
+            if visual_bible.get("color_palette"):
+                consistency_hints += f" Colors: {visual_bible.get('color_palette')}."
+
+        # SCENE ACTION FIRST, then style, then consistency hints at the end
+        return f"{visual_prompt}. {style_suffix}. High quality, no text.{consistency_hints}"
 
     def generate_images(self, script_json: Dict, theme: str, reel_name: str, mode: str = "story") -> List[str]:
         generated_files = []
         scenes = script_json.get("scenes", [])
-        
+        visual_bible = script_json.get("visual_bible")
+
         reel_dir = os.path.join(self.base_output_dir, reel_name, "images")
         os.makedirs(reel_dir, exist_ok=True)
-        
+
         for scene in scenes:
             scene_num = scene.get("scene_number")
             visual_prompt = scene.get("visual_prompt")
-            
-            optimized_prompt = self._optimize_prompt(visual_prompt, theme, mode)
+
+            optimized_prompt = self._optimize_prompt(visual_prompt, theme, visual_bible, mode)
             
             # Updated payload format for amazon.nova-canvas-v1:0
             body_dict = {
