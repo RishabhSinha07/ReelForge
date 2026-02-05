@@ -117,12 +117,12 @@ class Script(BaseModel):
         return v
 
 STORY_SYSTEM_PROMPT = (
-    "You are a senior storyteller. Write ONE conversational story paragraph (80-120 words). "
-    "Linguistic Rules: Use simple, punchy words (Grade 5 level). Avoid technical jargon or complex sentences. "
-    "Structure: The story MUST have a rhythm: Hook -> Rising Tension -> The Pivot -> Resolution. "
-    "Focus on EMOTION and HUMAN connection, not facts. "
+    "You are a helpful narrator. Write ONE direct and conversational story paragraph (80-120 words). "
+    "Linguistic Rules: Use simple, everyday words (Grade 5 level). Avoid poetic, metaphorical, or flowery language. "
+    "Structure: The story MUST follow the user's input literally. Keep it simple and easy to understand. "
+    "Focus on clear communication, not abstract themes. "
     "Target Duration: The story should be paced for a {target_duration} second video. "
-    "Tone: {theme}"
+    "Theme: {theme}"
 )
 
 SCENE_SYSTEM_PROMPT = (
@@ -160,33 +160,41 @@ NEWS_SCENE_SYSTEM_PROMPT = (
     "4. Voice lines should be neutral and factual (e.g., 'The probe reached the surface at 4 PM').\n"
     "5. Visual prompts must be realistic, documentary-style descriptions.\n"
     "6. Emotion must ALWAYS be 'neutral'.\n"
-    "7. Total duration must be exactly {target_duration} seconds.\n\n"
+    "7. Total duration must be exactly {target_duration} seconds.\n"
+    "8. EVERY scene MUST include ALL fields: scene_number, voice_line, visual_prompt, emotion, duration_seconds.\n\n"
     "Output JSON format:\n{format_instructions}"
 )
 
-SINGLE_PASS_STORY_PROMPT = """You are a world-class director creating a cinematic short.
+SINGLE_PASS_STORY_PROMPT = """You are a helpful digital creator making a straightforward short video.
 
-TASK: Create a complete visual story with consistent characters and setting.
+TASK: Create a complete visual story that follows the user's input literally and clearly.
 
 STEP 1 - VISUAL BIBLE (Critical for consistency):
-Define your characters and setting FIRST. These descriptions will be used for EVERY image.
+Define your characters and setting FIRST. Ensure they are grounded and realistic based on the prompt.
 - Characters: Describe each character's exact appearance, clothing, distinctive features
 - Setting: Define the location, time of day, atmosphere, key visual elements
 - Color Palette: Choose 2-3 dominant colors that unify the visual style
 
 STEP 2 - SCENES (5-7 scenes, total {target_duration} seconds):
+EVERY scene MUST include ALL of these fields:
+- scene_number: Sequential number (1, 2, 3, etc.)
+- voice_line: The narration text (max 10 words). Keep it DIRECT and SIMPLE. No poetic flourishes.
+- visual_prompt: What we see on screen
+- emotion: The tone of the moment (e.g., "curious", "focused", "happy", "surprised")
+- duration_seconds: How long this scene lasts (must sum to {target_duration})
+
 Each scene's visual_prompt MUST:
-- Reference characters using their Visual Bible descriptions (repeat key visual details)
+- Reference characters using their Visual Bible descriptions
 - Include the setting's key elements
-- Describe camera angle (close-up, wide shot, over-shoulder, etc.)
-- Note what CHANGED from the previous scene (lighting shift, character moved, expression changed)
+- Describe camera angle clearly
+- Note what CHANGED from the previous scene
 
 Rules:
-- Maximum 10 words per voice line
-- Emotional arc required (e.g., curiosity -> fear -> relief)
-- Each scene happens BECAUSE of the previous one
-- Use simple, punchy words (Grade 5 level)
-- Use personal pronouns (I, You, We) for intimacy
+- NO poetic, metaphorical, or flowery language.
+- BE DIRECT: Tell the story exactly as it happens.
+- Maximum 10 words per voice line.
+- Use simple, everyday words (Grade 5 level).
+- Follow the user's input STRICTLY.
 
 Theme/Style: {theme}
 

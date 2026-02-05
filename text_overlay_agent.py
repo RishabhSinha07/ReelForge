@@ -125,6 +125,9 @@ class TextOverlayAgent:
             
             try:
                 # White Base Line with safety margin to prevent stroke clipping
+                # Ensure text_y_pos is within bounds
+                safe_text_y = max(0, min(text_y_pos, v_height - 100))
+
                 base_line_clip = TextClip(
                     text=full_line_text,
                     font=active_font,
@@ -134,7 +137,7 @@ class TextOverlayAgent:
                     stroke_width=self.stroke_width,
                     method='label',
                     margin=(20, 20)
-                ).with_start(line_start_rel).with_duration(line_duration).with_position(('center', text_y_pos))
+                ).with_start(line_start_rel).with_duration(line_duration).with_position(('center', safe_text_y))
                 
                 line_w, line_h = base_line_clip.size
                 all_clips.append(base_line_clip)
@@ -176,22 +179,33 @@ class TextOverlayAgent:
                                  method='label', stroke_color=self.stroke_color, stroke_width=self.stroke_width, margin=(20, 20))
                     x2 = m2.size[0] - 20
                     
-                    # CROP: Take a slice of the GOLD line template. 
+                    # CROP: Take a slice of the GOLD line template.
                     # Width is adjusted by the margins
-                    word_highlight = highlight_template.cropped(x1=x1, y1=0, width=x2-x1, height=line_h)
-                    
+                    crop_width = max(1, x2 - x1)  # Ensure positive width
+                    crop_height = max(1, line_h)  # Ensure positive height
+
+                    # Skip if dimensions are invalid
+                    if crop_width <= 0 or crop_height <= 0:
+                        char_ptr += len(word_val) + 1
+                        continue
+
+                    word_highlight = highlight_template.cropped(x1=x1, y1=0, width=crop_width, height=crop_height)
+
                     # Timing
                     word_start_rel = (mark["time"] / 1000.0) + scene_start_time
                     if i < len(line) - 1:
                         word_end_rel = (line[i+1]["time"] / 1000.0) + scene_start_time
                     else:
                         word_end_rel = line_start_rel + line_duration
-                    
+
                     word_duration = max(0.1, word_end_rel - word_start_rel)
-                    
+
                     # Position: Anchor to the same line_x_start and line_y_pos as the white line
-                    word_pos = (line_x_start + x1, text_y_pos)
-                    
+                    # Ensure position is within video bounds
+                    word_x = max(0, min(line_x_start + x1, v_width - crop_width))
+                    word_y = max(0, min(text_y_pos, v_height - crop_height))
+                    word_pos = (word_x, word_y)
+
                     final_clip = word_highlight.with_start(word_start_rel).with_duration(word_duration).with_position(word_pos)
                     all_clips.append(final_clip)
                     
